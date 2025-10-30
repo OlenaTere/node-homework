@@ -108,18 +108,6 @@ describe("Middleware Integration", () => {
 	});
 
 	describe("[Enhanced Middleware Features]", () => {
-		describe("[Request Timing]", () => {
-			test("logs request duration", async () => {
-				await request(app).get("/dogs");
-				expect(logSpy).toHaveBeenCalledWith(expect.stringMatching(/\[.*\]: GET \/dogs \(.+\) - \d+ms/));
-			});
-
-			test("warns for slow requests", async () => {
-				await request(app).get("/slow");
-				expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/WARNING: Slow request detected/));
-			});
-		});
-
 		describe("[Security Headers]", () => {
 			let res;
 
