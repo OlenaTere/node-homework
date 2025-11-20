@@ -7,12 +7,26 @@ if (!fs.existsSync(sampleFilesDir)) {
   fs.mkdirSync(sampleFilesDir, { recursive: true });
 }
 
-// OS module
+//const fsp = fs.promises;
 
+// OS module
+console.log('Platform:', os.platform());
+console.log('CPU:', os.cpus()[0].model);
+console.log('Total Memory:', os.totalmem());
 
 // Path module
+const joinedPath = path.join(sampleFilesDir, 'demo.txt');
+console.log('Joined path:', joinedPath);
 
 // fs.promises API
-
-
-// Streams for large files- log first 40 chars of each chunk
+(async () => {
+  try {
+    //write a file
+    await fs.promises.writeFile(joinedPath, 'Hello from fs.promises!', 'utf8');
+    //read the same file
+    const text = await fs.promises.readFile(joinedPath, 'utf8');
+    console.log('fs.promises read:', text);
+  } catch (err) {
+    console.error('File operation error:', err.message);
+  }
+})
