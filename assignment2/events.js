@@ -12,3 +12,5 @@ setInterval(() => {
   const now = new Date().toString();
   emitter.emit("time", now);
 }, 5000);
+
+module.exports = emitter;
