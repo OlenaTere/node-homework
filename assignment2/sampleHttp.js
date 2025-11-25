@@ -22,7 +22,7 @@ const http = require("http");
 
 const server = http.createServer({ keepAliveTimeout: 60000 }, (req, res) => {
 
-  // ---------- ADD THIS: /time route ----------
+  //time route
   if (req.method === "GET" && req.url === "/time") {
     const now = new Date().toString();
     res.writeHead(200, { "Content-Type": "application/json" });
@@ -30,14 +30,14 @@ const server = http.createServer({ keepAliveTimeout: 60000 }, (req, res) => {
     return;
   }
 
-  // ---------- ADD THIS: /timePage route ----------
+  //timePage route
   if (req.method === "GET" && req.url === "/timePage") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(htmlString);
     return;
   }
 
-  // ---------- ORIGINAL CODE BELOW ----------
+  // original code
   if (
     req.method === "POST" &&
     req.url === "/" &&
