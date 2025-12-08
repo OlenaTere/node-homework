@@ -17,7 +17,7 @@ app.use((req, res, next) => {
     next();
   });
 
-  // ⭐ Controller require (NEW)
+  // Controller require
 const { register } = require("./controllers/userController");
 const userRouter = require("./routes/userRoutes");
 
