@@ -1,6 +1,14 @@
 const express = require("express");
 const app = express();
 
+// globals for week 4
+global.user_id = null;
+global.users = [];
+global.tasks = [];
+
+// Parse JSON request bodies
+app.use(express.json({ limit: "1kb" }));
+
 //Logging Middleware (Task 5)
 app.use((req, res, next) => {
     console.log("Method:", req.method);
@@ -9,13 +17,43 @@ app.use((req, res, next) => {
     next();
   });
 
+  // Controller require
+const { register } = require("./controllers/userController");
+const userRouter = require("./routes/userRoutes");
+
   //routes
+// app.get("/", (req, res) => {
+//     res.send("Hello, World!");
+//   });
+// app.post("/testpost", (req, res) => {
+//     res.send("POST request received at /testpost");
+//   });
 app.get("/", (req, res) => {
-    res.send("Hello, World!");
-  });
+  res.json({ message: "Hello, World!" });
+});
+
 app.post("/testpost", (req, res) => {
-    res.send("POST request received at /testpost");
-  });
+  res.json({ message: "POST request received at /testpost" });
+});
+
+// User Registration Route
+// app.post("/api/users", (req, res) => {
+//   res.send("User registration endpoint");
+// });
+// app.post("/api/users", (req, res)=>{
+//   console.log("This data was posted", JSON.stringify(req.body));
+//   res.send("parsed the data");
+// });
+// app.post("/api/users", (req, res)=>{
+//   const newUser = {...req.body}; // this makes a copy
+//   global.users.push(newUser);
+//   global.user_id = newUser;  // After the registration step, the user is set to logged on.
+//   delete req.body.password;
+//   res.status(201).json(req.body);
+// });
+// app.post("/api/users", register);
+app.use("/api/users", userRouter);
+
 
 //Middleware
 const notFound = require("./middleware/not-found");
@@ -46,7 +84,7 @@ const server = app.listen(port, () =>
         try {
           await new Promise(resolve => server.close(resolve));
           console.log('HTTP server closed.');
-          // If you have DB connections, close them here
+          
         } catch (err) {
           console.error('Error during shutdown:', err);
           code = 1;
