@@ -21,13 +21,12 @@ app.use((req, res, next) => {
 const { register } = require("./controllers/userController");
 const userRouter = require("./routes/userRoutes");
 
+// NEW FOR WEEK 5 – AUTH MIDDLEWARE + TASK ROUTER
+const authMiddleware = require("./middleware/auth");
+const taskRouter = require("./routes/taskRoutes");
+
+
   //routes
-// app.get("/", (req, res) => {
-//     res.send("Hello, World!");
-//   });
-// app.post("/testpost", (req, res) => {
-//     res.send("POST request received at /testpost");
-//   });
 app.get("/", (req, res) => {
   res.json({ message: "Hello, World!" });
 });
@@ -37,22 +36,10 @@ app.post("/testpost", (req, res) => {
 });
 
 // User Registration Route
-// app.post("/api/users", (req, res) => {
-//   res.send("User registration endpoint");
-// });
-// app.post("/api/users", (req, res)=>{
-//   console.log("This data was posted", JSON.stringify(req.body));
-//   res.send("parsed the data");
-// });
-// app.post("/api/users", (req, res)=>{
-//   const newUser = {...req.body}; // this makes a copy
-//   global.users.push(newUser);
-//   global.user_id = newUser;  // After the registration step, the user is set to logged on.
-//   delete req.body.password;
-//   res.status(201).json(req.body);
-// });
-// app.post("/api/users", register);
 app.use("/api/users", userRouter);
+
+// Task routes (protected — require authentication)
+app.use("/api/tasks", authMiddleware, taskRouter);
 
 
 //Middleware
