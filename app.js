@@ -21,13 +21,14 @@ app.use((req, res, next) => {
 const { register } = require("./controllers/userController");
 const userRouter = require("./routes/userRoutes");
 
+// NEW FOR WEEK 5 – AUTH MIDDLEWARE + TASK ROUTER
+const authMiddleware = require("./middleware/auth");
+const taskRouter = require("./routes/taskRoutes");
+
+//week 6
+const pool = require("./db/pg-pool");
+
   //routes
-// app.get("/", (req, res) => {
-//     res.send("Hello, World!");
-//   });
-// app.post("/testpost", (req, res) => {
-//     res.send("POST request received at /testpost");
-//   });
 app.get("/", (req, res) => {
   res.json({ message: "Hello, World!" });
 });
@@ -36,23 +37,21 @@ app.post("/testpost", (req, res) => {
   res.json({ message: "POST request received at /testpost" });
 });
 
+// Health check verifies DB connectivity - week 6
+app.get("/health", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ status: "ok", db: "connected" });
+  } catch (err) {
+    res.status(500).json({ message: `db not connected, error: ${err.message}` });
+  }
+});
+
 // User Registration Route
-// app.post("/api/users", (req, res) => {
-//   res.send("User registration endpoint");
-// });
-// app.post("/api/users", (req, res)=>{
-//   console.log("This data was posted", JSON.stringify(req.body));
-//   res.send("parsed the data");
-// });
-// app.post("/api/users", (req, res)=>{
-//   const newUser = {...req.body}; // this makes a copy
-//   global.users.push(newUser);
-//   global.user_id = newUser;  // After the registration step, the user is set to logged on.
-//   delete req.body.password;
-//   res.status(201).json(req.body);
-// });
-// app.post("/api/users", register);
 app.use("/api/users", userRouter);
+
+// Task routes (protected — require authentication)
+app.use("/api/tasks", authMiddleware, taskRouter);
 
 
 //Middleware
@@ -84,6 +83,9 @@ const server = app.listen(port, () =>
         try {
           await new Promise(resolve => server.close(resolve));
           console.log('HTTP server closed.');
+
+          // Close all DB pool connections - week 6
+    await pool.end();
           
         } catch (err) {
           console.error('Error during shutdown:', err);
