@@ -9,7 +9,7 @@ global.tasks = [];
 // Parse JSON request bodies
 app.use(express.json({ limit: "1kb" }));
 
-//Logging Middleware (Task 5)
+//Logging Middleware
 app.use((req, res, next) => {
     console.log("Method:", req.method);
     console.log("Path:", req.path);
@@ -21,12 +21,15 @@ app.use((req, res, next) => {
 const { register } = require("./controllers/userController");
 const userRouter = require("./routes/userRoutes");
 
-// NEW FOR WEEK 5 – AUTH MIDDLEWARE + TASK ROUTER
+// FOR WEEK 5 – AUTH MIDDLEWARE + TASK ROUTER
 const authMiddleware = require("./middleware/auth");
 const taskRouter = require("./routes/taskRoutes");
 
 //week 6
-const pool = require("./db/pg-pool");
+//const pool = require("./db/pg-pool");
+
+//week 8 (assignment 6b)
+const prisma = require("./db/prisma");
 
   //routes
 app.get("/", (req, res) => {
@@ -37,13 +40,15 @@ app.post("/testpost", (req, res) => {
   res.json({ message: "POST request received at /testpost" });
 });
 
-// Health check verifies DB connectivity - week 6
+// replaced health check verifies DB connectivity - week 8 (assignment 6b)
 app.get("/health", async (req, res) => {
   try {
-    await pool.query("SELECT 1");
+    await prisma.$queryRaw`SELECT 1`;
     res.json({ status: "ok", db: "connected" });
   } catch (err) {
-    res.status(500).json({ message: `db not connected, error: ${err.message}` });
+    res
+      .status(500)
+      .json({ status: "error", db: "not connected", error: err.message });
   }
 });
 
@@ -85,7 +90,12 @@ const server = app.listen(port, () =>
           console.log('HTTP server closed.');
 
           // Close all DB pool connections - week 6
-    await pool.end();
+    //await pool.end();
+
+    // Disconnect Prisma - assignment 6b
+    await prisma.$disconnect();
+    console.log("Prisma disconnected");
+
           
         } catch (err) {
           console.error('Error during shutdown:', err);

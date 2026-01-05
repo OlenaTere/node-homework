@@ -1,8 +1,9 @@
 const { taskSchema, patchTaskSchema } = require("../validation/taskSchema");
-const pool = require("../db/pg-pool"); // ✅ NEW: DB pool
+//const pool = require("../db/pg-pool"); // DB pool
+const prisma = require("../db/prisma"); // NEW (assignment 6b)
 
 // Create a new task for the currently logged-on user
-const create = async (req, res) => { // ✅ CHANGED: async
+const create = async (req, res, next) => {
   if (!req.body) req.body = {};
 
   const { error, value } = taskSchema.validate(req.body, { abortEarly: false });
@@ -11,63 +12,88 @@ const create = async (req, res) => { // ✅ CHANGED: async
     return res.status(400).json({ message: error.message });
   }
 
-  // ✅ CHANGED: map camelCase to DB column name
-  const isCompleted = value.isCompleted ?? value.is_completed ?? false;
+  try {
+    const isCompleted = value.isCompleted ?? value.is_completed ?? false;
 
-  const result = await pool.query(
-    `INSERT INTO tasks (title, is_completed, user_id)
-     VALUES ($1, $2, $3)
-     RETURNING id, title, is_completed`,
-    [value.title, isCompleted, global.user_id]
-  );
+    const task = await prisma.task.create({
+      data: {
+        title: value.title,
+        isCompleted: isCompleted,
+        userId: global.user_id,
+      },
+      select: {
+        id: true,
+        title: true,
+        isCompleted: true,
+      },
+    });
 
-  // ✅ CHANGED: return DB row (no user_id)
-  return res.status(201).json(result.rows[0]);
+    return res.status(201).json(task);
+  } catch (err) {
+    return next(err);
+  }
 };
 
 // Get all tasks for the currently logged-on user
-const index = async (req, res) => { // ✅ CHANGED: async
-  const result = await pool.query(
-    "SELECT id, title, is_completed FROM tasks WHERE user_id = $1 ORDER BY id",
-    [global.user_id]
-  );
+const index = async (req, res, next) => {
+  try {
+    const tasks = await prisma.task.findMany({
+      where: { userId: global.user_id },
+      select: { id: true, title: true, isCompleted: true },
+      orderBy: { id: "asc" },
+    });
 
-  // Keep your existing behavior: 404 if none
-  if (result.rows.length === 0) {
-    return res.status(404).json({ message: "That task was not found" });
+    if (tasks.length === 0) {
+      return res.status(404).json({ message: "That task was not found" });
+    }
+
+    return res.json(tasks);
+  } catch (err) {
+    return next(err);
   }
-
-  return res.json(result.rows);
 };
 
 // Get a single task by ID for the currently logged-on User
-const show = async (req, res) => { // ✅ CHANGED: async
+const show = async (req, res, next) => {
   const taskToFind = parseInt(req.params?.id);
 
-  // Validate ID (kept exactly)
+  // Validate ID (keep existing behavior)
   if (!taskToFind) {
     return res
       .status(400)
       .json({ message: "The task ID passed is not valid." });
   }
 
-  const result = await pool.query(
-    "SELECT id, title, is_completed FROM tasks WHERE id = $1 AND user_id = $2",
-    [taskToFind, global.user_id]
-  );
+  try {
+    const task = await prisma.task.findUnique({
+      where: {
+        id_userId: {
+          id: taskToFind,
+          userId: global.user_id,
+        },
+      },
+      select: {
+        id: true,
+        title: true,
+        isCompleted: true,
+      },
+    });
 
-  if (result.rows.length === 0) {
-    return res.status(404).json({ message: "That task was not found" });
+    if (!task) {
+      return res.status(404).json({ message: "That task was not found" });
+    }
+
+    return res.json(task);
+  } catch (err) {
+    return next(err);
   }
-
-  return res.json(result.rows[0]);
 };
 
 // Update a task by ID for the currently logged-on User
-const update = async (req, res) => { // ✅ CHANGED: async
+const update = async (req, res, next) => {
   const taskToFind = parseInt(req.params?.id);
 
-  // Validate ID (kept exactly)
+  // Validate ID (keep same behavior)
   if (!taskToFind) {
     return res
       .status(400)
@@ -82,49 +108,64 @@ const update = async (req, res) => { // ✅ CHANGED: async
     return res.status(400).json({ message: error.message });
   }
 
-  // ✅ CHANGED: build DB update object using DB column names
+  // Build the update payload using Prisma field names
   const taskChange = {};
   if (value.title !== undefined) taskChange.title = value.title;
-  if (value.isCompleted !== undefined) taskChange.is_completed = value.isCompleted;
-  if (value.is_completed !== undefined) taskChange.is_completed = value.is_completed;
 
-  const keys = Object.keys(taskChange);
+  const incomingIsCompleted =
+    value.isCompleted ?? value.is_completed;
 
-  // If nothing to update, return current task (no extra behavior added—just safe SQL)
-  if (keys.length === 0) {
-    const current = await pool.query(
-      "SELECT id, title, is_completed FROM tasks WHERE id = $1 AND user_id = $2",
-      [taskToFind, global.user_id]
-    );
+  if (incomingIsCompleted !== undefined) {
+    taskChange.isCompleted = incomingIsCompleted;
+  }
 
-    if (current.rows.length === 0) {
-      return res.status(404).json({ message: "That task was not found" });
+  // If nothing to update, return the current task (your existing behavior)
+  if (Object.keys(taskChange).length === 0) {
+    try {
+      const task = await prisma.task.findUnique({
+        where: {
+          id_userId: {
+            id: taskToFind,
+            userId: global.user_id,
+          },
+        },
+        select: { id: true, title: true, isCompleted: true },
+      });
+
+      if (!task) {
+        return res.status(404).json({ message: "That task was not found" });
+      }
+
+      return res.json(task);
+    } catch (err) {
+      return next(err);
     }
-
-    return res.json(current.rows[0]);
   }
 
-  // ✅ CHANGED: correct SQL includes SET + filters by id AND user_id
-  const setClauses = keys.map((key, i) => `${key} = $${i + 1}`).join(", ");
-  const idParm = `$${keys.length + 1}`;
-  const userParm = `$${keys.length + 2}`;
+  // Prisma update (catch P2025 when not found)
+  try {
+    const task = await prisma.task.update({
+      data: taskChange,
+      where: {
+        id_userId: {
+          id: taskToFind,
+          userId: global.user_id,
+        },
+      },
+      select: { id: true, title: true, isCompleted: true },
+    });
 
-  const updated = await pool.query(
-    `UPDATE tasks SET ${setClauses}
-     WHERE id = ${idParm} AND user_id = ${userParm}
-     RETURNING id, title, is_completed`,
-    [...Object.values(taskChange), taskToFind, global.user_id]
-  );
-
-  if (updated.rows.length === 0) {
-    return res.status(404).json({ message: "That task was not found" });
+    return res.json(task);
+  } catch (err) {
+    if (err.code === "P2025") {
+      return res.status(404).json({ message: "The task was not found." });
+    }
+    return next(err);
   }
-
-  return res.json(updated.rows[0]);
 };
 
 // Delete a task owned by the logged-in User
-const deleteTask = async (req, res) => { // ✅ CHANGED: async
+const deleteTask = async (req, res, next) => {
   const taskToFind = parseInt(req.params?.id);
 
   // Validate ID (kept exactly)
@@ -134,16 +175,29 @@ const deleteTask = async (req, res) => { // ✅ CHANGED: async
       .json({ message: "The task ID passed is not valid." });
   }
 
-  const deleted = await pool.query(
-    "DELETE FROM tasks WHERE id = $1 AND user_id = $2 RETURNING id, title, is_completed",
-    [taskToFind, global.user_id]
-  );
+  try {
+    const deletedTask = await prisma.task.delete({
+      where: {
+        id_userId: {
+          id: taskToFind,
+          userId: global.user_id,
+        },
+      },
+      select: {
+        id: true,
+        title: true,
+        isCompleted: true,
+      },
+    });
 
-  if (deleted.rows.length === 0) {
-    return res.status(404).json({ message: "That task was not found" });
+    return res.json(deletedTask);
+  } catch (err) {
+    // Prisma throws this when delete() doesn't find a row
+    if (err.code === "P2025") {
+      return res.status(404).json({ message: "That task was not found" });
+    }
+    return next(err);
   }
-
-  return res.json(deleted.rows[0]);
 };
 
 module.exports = {
