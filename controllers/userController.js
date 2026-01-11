@@ -1,9 +1,10 @@
 const { userSchema } = require("../validation/userSchema");
 const { StatusCodes } = require("http-status-codes");
-const pool = require("../db/pg-pool");
+//const pool = require("../db/pg-pool");
 const crypto = require("crypto");
 const util = require("util");
 const scrypt = util.promisify(crypto.scrypt);
+const prisma = require("../db/prisma"); // added for assignment 6b logon
 
 async function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("hex");
@@ -18,7 +19,7 @@ async function comparePassword(inputPassword, storedHash) {
   return crypto.timingSafeEqual(keyBuffer, derivedKey);
 }
 
-// UPDATED (per Assignment 5b 3b): register now writes to DB
+// (Assignment 5b 3b): register now writes to DB
 const register = async (req, res, next) => {
     if (!req.body) req.body = {};
   
@@ -32,51 +33,58 @@ const register = async (req, res, next) => {
   
     value.hashed_password = await hashPassword(value.password);
   
+    // updated register to use prisma week 8 (assignment 6b) 
     try {
-      const result = await pool.query(
-        `INSERT INTO users (email, name, hashed_password)
-         VALUES ($1, $2, $3)
-         RETURNING id, email, name`,
-        [value.email.toLowerCase(), value.name, value.hashed_password]
-      );
-  
-      const user = result.rows[0];
+      const normalizedEmail = value.email.toLowerCase();
+    
+      // store hashed password under the Prisma field name
+      const hashedPassword = value.hashed_password;
+    
+      const user = await prisma.user.create({
+        data: {
+          name: value.name,
+          email: normalizedEmail,
+          hashedPassword: hashedPassword,
+        },
+        select: { id: true, name: true, email: true },
+      });
+    
       global.user_id = user.id;
-  
+    
       return res.status(StatusCodes.CREATED).json({
         name: user.name,
         email: user.email,
       });
-    } catch (e) {
-      if (e.code === "23505") {
+    } catch (err) {
+      if (err.name === "PrismaClientKnownRequestError" && err.code === "P2002") {
         return res.status(400).json({ message: "Email already registered" });
       }
-      return next(e);
+      return next(err);
     }
   };
 
-// UPDATED (per Assignment 5b 3a): logon now authenticates via DB
+// (Assignment 5b 3a): logon now authenticates via DB
 const logon = async (req, res, next) => {
     if (!req.body) req.body = {};
   
     const { email, password } = req.body;
   
     try {
-      const result = await pool.query("SELECT * FROM users WHERE email = $1", [
-        (email || "").toLowerCase(),
-      ]);
-  
-      if (result.rows.length === 0) {
-        return res
-          .status(StatusCodes.UNAUTHORIZED)
-          .json({ message: "Authentication Failed" });
-      }
-  
-      const user = result.rows[0];
+      const normalizedEmail = (email || "").toLowerCase();
+
+const user = await prisma.user.findUnique({
+  where: { email: normalizedEmail },
+});
+
+if (!user) {
+  return res
+    .status(StatusCodes.UNAUTHORIZED)
+    .json({ message: "Authentication Failed" });
+}
   
       const passwordsMatch = await comparePassword(
         password,
-        user.hashed_password
+        user.hashedPassword
       );
   
       if (!passwordsMatch) {
