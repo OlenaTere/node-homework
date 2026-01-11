@@ -31,6 +31,9 @@ const taskRouter = require("./routes/taskRoutes");
 //week 8 (assignment 6b)
 const prisma = require("./db/prisma");
 
+//week 9 (assignment 7)
+const analyticsRouter = require("./routes/analyticsRoutes");
+
   //routes
 app.get("/", (req, res) => {
   res.json({ message: "Hello, World!" });
@@ -57,6 +60,8 @@ app.use("/api/users", userRouter);
 
 // Task routes (protected — require authentication)
 app.use("/api/tasks", authMiddleware, taskRouter);
+
+app.use("/api/analytics", authMiddleware, analyticsRouter);
 
 
 //Middleware

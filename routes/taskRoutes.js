@@ -7,12 +7,15 @@ const {
   show,
   update,
   deleteTask,
+  bulkCreate, 
 } = require("../controllers/taskController");
 
 // /api/tasks
 router.route("/")
   .get(index)   // GET /api/tasks
   .post(create); // POST /api/tasks
+
+router.post("/bulk", bulkCreate);
 
 // /api/tasks/:id
 router.route("/:id")
