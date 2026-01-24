@@ -1,13 +1,34 @@
 const express = require("express");
+
 const app = express();
+
+app.set("trust proxy", 1);
+const helmet = require("helmet");
+const { xss } = require("express-xss-sanitizer");
+const rateLimiter = require("express-rate-limit");
+const cookieParser = require("cookie-parser"); // added for assignmemt 8 (week 10)
 
 // globals for week 4
 global.user_id = null;
 global.users = [];
 global.tasks = [];
 
+app.use(
+  rateLimiter({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+  }),
+);
+
+app.use(helmet());
+
+// Parse cookies (needed for JWT authentication, week 10, assignment 8)
+app.use(cookieParser());
+
 // Parse JSON request bodies
 app.use(express.json({ limit: "1kb" }));
+
+app.use(xss());
 
 //Logging Middleware
 app.use((req, res, next) => {
@@ -22,8 +43,11 @@ const { register } = require("./controllers/userController");
 const userRouter = require("./routes/userRoutes");
 
 // FOR WEEK 5 – AUTH MIDDLEWARE + TASK ROUTER
-const authMiddleware = require("./middleware/auth");
+//const authMiddleware = require("./middleware/auth");
 const taskRouter = require("./routes/taskRoutes");
+
+//week 10 (assignment 8)
+const jwtMiddleware = require("./middleware/jwtMiddleware");
 
 //week 6
 //const pool = require("./db/pg-pool");
@@ -59,9 +83,9 @@ app.get("/health", async (req, res) => {
 app.use("/api/users", userRouter);
 
 // Task routes (protected — require authentication)
-app.use("/api/tasks", authMiddleware, taskRouter);
+app.use("/api/tasks", jwtMiddleware, taskRouter);
 
-app.use("/api/analytics", authMiddleware, analyticsRouter);
+app.use("/api/analytics", jwtMiddleware, analyticsRouter);
 
 
 //Middleware

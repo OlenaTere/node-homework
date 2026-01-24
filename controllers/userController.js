@@ -1,10 +1,30 @@
 const { userSchema } = require("../validation/userSchema");
 const { StatusCodes } = require("http-status-codes");
-//const pool = require("../db/pg-pool");
 const crypto = require("crypto");
 const util = require("util");
 const scrypt = util.promisify(crypto.scrypt);
 const prisma = require("../db/prisma"); // added for assignment 6b logon
+
+//added for week 10 (assignment 8)
+const { randomUUID } = require("crypto");
+const jwt = require("jsonwebtoken");
+
+const cookieFlags = (req) => {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production", // only when HTTPS is available
+    sameSite: "Strict",
+  };
+};
+
+const setJwtCookie = (req, res, user) => {
+  // Sign JWT
+  const payload = { id: user.id, csrfToken: randomUUID() };
+  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1h" }); // 1 hour expiration
+  // Set cookie, the cookie flags have to be different in production and in test.
+  res.cookie("jwt", token, { ...cookieFlags(req), maxAge: 3600000 }); // 1 hour expiration
+  return payload.csrfToken; // this is needed in the body returned by logon() or register()
+};
 
 async function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("hex");
@@ -86,8 +106,15 @@ const register = async (req, res, next) => {
         return { user: newUser, welcomeTasks };
       });
 
-      global.user_id = result.user.id;
+      //global.user_id = result.user.id;
+      
+      // modified for week 10 (assignment 8)
+      const csrfToken = setJwtCookie(req, res, result.user);
+
       return res.status(201).json({
+        name: result.user.name,
+        email: result.user.email,
+        csrfToken,
         user: result.user,
         welcomeTasks: result.welcomeTasks,
         transactionStatus: "success",
@@ -138,11 +165,15 @@ if (!user) {
           .json({ message: "Authentication Failed" });
       }
   
-      global.user_id = user.id;
+      //global.user_id = user.id;
+      
+      // modified for week 10 (assignment 8)
+      const csrfToken = setJwtCookie(req, res, user);
   
       return res.status(StatusCodes.OK).json({
         name: user.name,
         email: user.email,
+        csrfToken,
       });
     } catch (err) {
       return next(err);
@@ -151,7 +182,10 @@ if (!user) {
 
 
 const logoff = (req, res) => {
-  global.user_id = null;
+  //global.user_id = null;
+
+  //modified (for week 10, assignment 8) to clear the cookie
+  res.clearCookie("jwt", cookieFlags(req));
   // no body needed
   return res.sendStatus(StatusCodes.OK);
 };
