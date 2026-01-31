@@ -92,9 +92,9 @@ const pagination = {
   hasPrev: page > 1,
 };
 
-    // if (tasks.length === 0) {
-    //   return res.status(404).json({ message: "That task was not found" });
-    // }
+    if (tasks.length === 0) {
+      return res.status(404).json({ message: "That task was not found" });
+    }
 
     return res.status(200).json({ tasks, pagination });
   } catch (err) {
