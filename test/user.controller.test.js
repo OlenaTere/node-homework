@@ -54,6 +54,12 @@ describe("testing logon, register, and logoff", () => {
       body: { name: "Bob", email: "bob@sample.com", password: "Pa$$word20" },
     });
 
+    // added to fix assignment9 tests after adding reCAPTCHA for assignment 10
+req.get = (headerName) =>
+    headerName === "X-Recaptcha-Test"
+      ? process.env.RECAPTCHA_BYPASS
+      : undefined;
+
     saveRes = MockResponseWithCookies();
     await waitForRouteHandlerCompletion(register, req, saveRes);
 
