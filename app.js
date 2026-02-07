@@ -26,7 +26,7 @@ app.use(helmet());
 app.use(cookieParser());
 
 // Parse JSON request bodies
-app.use(express.json({ limit: "1kb" }));
+app.use(express.json({ limit: "5mb" }));
 
 app.use(xss());
 
