@@ -1,3 +1,42 @@
+# Node Homework Backend – Final Project
+
+This repository contains my final backend project for Code the Dream’s Node/Express course.
+
+## Project Overview
+
+This is a REST API for a task management (todo) application built with:
+
+- Node.js
+- Express
+- PostgreSQL
+- Prisma ORM
+- JWT authentication with httpOnly cookies and CSRF protection
+
+The backend supports user registration, login/logout, and full CRUD operations on tasks.
+
+## Extra Feature (Assignment 11)
+
+For the final assignment, I added support for **task due dates** and a new endpoint to retrieve **overdue tasks**.
+
+### New Endpoint
+
+GET /api/tasks/overdue
+
+Returns all incomplete tasks for the logged-in user where the task due date is in the past.
+
+### Updated Endpoints
+
+The following existing endpoints were extended (without breaking changes):
+
+- `POST /api/tasks` — now optionally accepts a `dueDate`
+- `PATCH /api/tasks/:id` — now optionally accepts a `dueDate`
+
+The `dueDate` field is optional, so existing behavior remains unchanged.
+
+## Deployment
+
+The backend is deployed on Render.
+
 # Getting Started with Node Development
 
 Welcome to Code the Dream’s Node/Express class! You will be learning Node.js, an implementation of the JavaScript engine that runs standalone or as a web server. This page describes how to begin. You can develop Node applications on MacOS, Linux, or Windows. If you are developing on Windows, there is no need to do development in a virtual machine, as Node development works fine in Windows native environments, but you can use the Windows Subsystem for Linux if you prefer. You will need to install:
@@ -295,6 +334,13 @@ git checkout -b assignment2
 - Usual Express files (e.g., `app.js`, `routes/`, `controllers/`, `utils/`, `models/`, `tests/`, etc.) will be present in the root or as needed for the Node/Express app.
 - `package.json`: Single package file for the whole project.
 - The repository is structured for cloud deployment.
+
+## Final Project Notes
+
+- Added optional task due dates
+- Implemented an overdue tasks endpoint
+- All existing tests pass
+- No frontend changes were required
 
 ## Good Luck With the Class, and Happy Coding!
 

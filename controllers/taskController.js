@@ -1,6 +1,5 @@
 const { taskSchema, patchTaskSchema } = require("../validation/taskSchema");
-//const pool = require("../db/pg-pool"); // DB pool
-const prisma = require("../db/prisma"); // added for assignment 6b
+const prisma = require("../db/prisma");
 
 // Create a new task for the currently logged-on user
 const create = async (req, res, next) => {
@@ -14,19 +13,22 @@ const create = async (req, res, next) => {
 
   try {
     const isCompleted = value.isCompleted ?? value.is_completed ?? false;
+    const dueDate = value.dueDate ? new Date(value.dueDate) : null;
 
     const task = await prisma.task.create({
       data: {
         title: value.title,
         isCompleted: isCompleted,
-        priority: value.priority, 
+        priority: value.priority,
+        dueDate: dueDate,
         userId: req.user.id,
       },
       select: {
         id: true,
         title: true,
         isCompleted: true,
-        priority: true, // added for assignment 7 
+        priority: true,
+        dueDate: true,
       },
     });
 
@@ -39,24 +41,24 @@ const create = async (req, res, next) => {
 // Get all tasks for the currently logged-on user
 const index = async (req, res, next) => {
   const page = parseInt(req.query.page) || 1;
-const limit = parseInt(req.query.limit) || 10;
-if (page < 1) {
-  return res.status(400).json({ message: "page must be >= 1" });
-}
+  const limit = parseInt(req.query.limit) || 10;
+  if (page < 1) {
+    return res.status(400).json({ message: "page must be >= 1" });
+  }
 
-if (limit < 1 || limit > 100) {
-  return res.status(400).json({ message: "limit must be between 1 and 100" });
-}
+  if (limit < 1 || limit > 100) {
+    return res.status(400).json({ message: "limit must be between 1 and 100" });
+  }
 
-const skip = (page - 1) * limit;
-const whereClause = { userId: req.user.id };
+  const skip = (page - 1) * limit;
+  const whereClause = { userId: req.user.id };
 
-if (req.query.find) {
-  whereClause.title = {
-    contains: req.query.find,
-    mode: "insensitive",
-  };
-}
+  if (req.query.find) {
+    whereClause.title = {
+      contains: req.query.find,
+      mode: "insensitive",
+    };
+  }
 
   try {
     const tasks = await prisma.task.findMany({
@@ -83,14 +85,14 @@ if (req.query.find) {
     });
     const pages = Math.ceil(total / limit);
 
-const pagination = {
-  page,
-  limit,
-  total,
-  pages,
-  hasNext: page * limit < total,
-  hasPrev: page > 1,
-};
+    const pagination = {
+      page,
+      limit,
+      total,
+      pages,
+      hasNext: page * limit < total,
+      hasPrev: page > 1,
+    };
 
     if (tasks.length === 0) {
       return res.status(404).json({ message: "That task was not found" });
@@ -159,7 +161,9 @@ const update = async (req, res, next) => {
 
   if (!req.body) req.body = {};
 
-  const { error, value } = patchTaskSchema.validate(req.body, { abortEarly: false });
+  const { error, value } = patchTaskSchema.validate(req.body, {
+    abortEarly: false,
+  });
 
   if (error) {
     return res.status(400).json({ message: error.message });
@@ -169,8 +173,7 @@ const update = async (req, res, next) => {
   const taskChange = {};
   if (value.title !== undefined) taskChange.title = value.title;
 
-  const incomingIsCompleted =
-    value.isCompleted ?? value.is_completed;
+  const incomingIsCompleted = value.isCompleted ?? value.is_completed;
 
   if (incomingIsCompleted !== undefined) {
     taskChange.isCompleted = incomingIsCompleted;
@@ -187,7 +190,7 @@ const update = async (req, res, next) => {
             userId: req.user.id,
           },
         },
-        select: { id: true, title: true, isCompleted: true, priority: true, },
+        select: { id: true, title: true, isCompleted: true, priority: true },
       });
 
       if (!task) {
@@ -210,7 +213,7 @@ const update = async (req, res, next) => {
           userId: req.user.id,
         },
       },
-      select: { id: true, title: true, isCompleted: true, priority: true, },
+      select: { id: true, title: true, isCompleted: true, priority: true },
     });
 
     return res.json(task);
@@ -305,6 +308,32 @@ const bulkCreate = async (req, res, next) => {
   }
 };
 
+// Get overdue tasks for the currently logged-on user
+const overdue = async (req, res, next) => {
+  try {
+    const tasks = await prisma.task.findMany({
+      where: {
+        userId: req.user.id,
+        isCompleted: false,
+        dueDate: {
+          lt: new Date(),
+        },
+      },
+      select: {
+        id: true,
+        title: true,
+        isCompleted: true,
+        priority: true,
+        dueDate: true,
+      },
+    });
+
+    return res.status(200).json({ tasks });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 module.exports = {
   create,
   index,
@@ -312,4 +341,5 @@ module.exports = {
   update,
   deleteTask,
   bulkCreate,
+  overdue,
 };

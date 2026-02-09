@@ -1,4 +1,3 @@
-
 const { StatusCodes } = require("http-status-codes");
 
 module.exports = (req, res) => {
