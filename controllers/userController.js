@@ -3,16 +3,15 @@ const { StatusCodes } = require("http-status-codes");
 const crypto = require("crypto");
 const util = require("util");
 const scrypt = util.promisify(crypto.scrypt);
-const prisma = require("../db/prisma"); // added for assignment 6b logon
+const prisma = require("../db/prisma");
 
-//added for week 10 (assignment 8)
 const { randomUUID } = require("crypto");
 const jwt = require("jsonwebtoken");
 
 const cookieFlags = (req) => {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production", // only when HTTPS is available
+    secure: process.env.NODE_ENV === "production",
     sameSite: "Strict",
   };
 };
@@ -20,9 +19,9 @@ const cookieFlags = (req) => {
 const setJwtCookie = (req, res, user) => {
   // Sign JWT
   const payload = { id: user.id, csrfToken: randomUUID() };
-  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1h" }); // 1 hour expiration
+  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1h" });
   // Set cookie, the cookie flags have to be different in production and in test.
-  res.cookie("jwt", token, { ...cookieFlags(req), maxAge: 3600000 }); // 1 hour expiration
+  res.cookie("jwt", token, { ...cookieFlags(req), maxAge: 3600000 });
   return payload.csrfToken; // this is needed in the body returned by logon() or register()
 };
 
@@ -39,187 +38,175 @@ async function comparePassword(inputPassword, storedHash) {
   return crypto.timingSafeEqual(keyBuffer, derivedKey);
 }
 
-// (Assignment 5b 3b): register now writes to DB
+// register now writes to DB
 const register = async (req, res, next) => {
-    if (!req.body) req.body = {};
+  if (!req.body) req.body = {};
 
-    //reCAPTCHA block (assignment 10, week 12)
-    let isPerson = false;
-if (req.body.recaptchaToken) {
-  const token = req.body.recaptchaToken;
-  const params = new URLSearchParams();
-  params.append("secret", process.env.RECAPTCHA_SECRET);
-  params.append("response", token);
-  params.append("remoteip", req.ip);
-  const response = await fetch(
-    // might throw an error that would cause a 500 from the error handler
-    "https://www.google.com/recaptcha/api/siteverify",
-    {
-      method: "POST",
-      body: params.toString(),
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+  let isPerson = false;
+  if (req.body.recaptchaToken) {
+    const token = req.body.recaptchaToken;
+    const params = new URLSearchParams();
+    params.append("secret", process.env.RECAPTCHA_SECRET);
+    params.append("response", token);
+    params.append("remoteip", req.ip);
+    const response = await fetch(
+      // might throw an error that would cause a 500 from the error handler
+      "https://www.google.com/recaptcha/api/siteverify",
+      {
+        method: "POST",
+        body: params.toString(),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
       },
-    },
-  );
-  const data = await response.json();
-  if (data.success) isPerson = true;
-  delete req.body.recaptchaToken;
-} else if (
-  process.env.RECAPTCHA_BYPASS &&
-  req.get("X-Recaptcha-Test") === process.env.RECAPTCHA_BYPASS
-) {
-  // might be a test environment
-  isPerson = true;
-}
-if (!isPerson) {
-  return res
-    .status(StatusCodes.BAD_REQUEST)
-    .json({ message: "We can't tell if you're a person or a bot." });
-}
-  
-    const { error, value } = userSchema.validate(req.body, { abortEarly: false });
-    if (error) {
-      return res.status(400).json({
-        message: "Validation failed",
-        details: error.details,
+    );
+    const data = await response.json();
+    if (data.success) isPerson = true;
+    delete req.body.recaptchaToken;
+  } else if (
+    process.env.RECAPTCHA_BYPASS &&
+    req.get("X-Recaptcha-Test") === process.env.RECAPTCHA_BYPASS
+  ) {
+    // might be a test environment
+    isPerson = true;
+  }
+  if (!isPerson) {
+    return res
+      .status(StatusCodes.BAD_REQUEST)
+      .json({ message: "We can't tell if you're a person or a bot." });
+  }
+
+  const { error, value } = userSchema.validate(req.body, { abortEarly: false });
+  if (error) {
+    return res.status(400).json({
+      message: "Validation failed",
+      details: error.details,
+    });
+  }
+
+  value.hashed_password = await hashPassword(value.password);
+  delete value.password;
+
+  // updated register to use prisma
+  try {
+    const normalizedEmail = value.email.toLowerCase();
+
+    // store hashed password under the Prisma field name
+    const hashedPassword = value.hashed_password;
+
+    const result = await prisma.$transaction(async (tx) => {
+      // create user
+      const newUser = await tx.user.create({
+        data: {
+          email: normalizedEmail,
+          name: value.name,
+          hashedPassword: hashedPassword,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          createdAt: true,
+        },
       });
+
+      // welcome tasks (exact titles + priorities)
+      const welcomeTaskData = [
+        {
+          title: "Complete your profile",
+          userId: newUser.id,
+          priority: "medium",
+        },
+        { title: "Add your first task", userId: newUser.id, priority: "high" },
+        { title: "Explore the app", userId: newUser.id, priority: "low" },
+      ];
+
+      await tx.task.createMany({ data: welcomeTaskData });
+
+      // fetch tasks to return
+      const welcomeTasks = await tx.task.findMany({
+        where: {
+          userId: newUser.id,
+          title: { in: welcomeTaskData.map((t) => t.title) },
+        },
+        select: {
+          id: true,
+          title: true,
+          isCompleted: true,
+          userId: true,
+          priority: true,
+        },
+        orderBy: { id: "asc" }, // makes response stable
+      });
+
+      return { user: newUser, welcomeTasks };
+    });
+
+    const csrfToken = setJwtCookie(req, res, result.user);
+
+    return res.status(201).json({
+      name: result.user.name,
+      email: result.user.email,
+      csrfToken,
+      user: result.user,
+      welcomeTasks: result.welcomeTasks,
+      transactionStatus: "success",
+    });
+  } catch (err) {
+    if (err.code === "P2002") {
+      return res.status(400).json({ error: "Email already registered" });
     }
-  
-    value.hashed_password = await hashPassword(value.password);
-    delete value.password;
-  
-    // updated register to use prisma week 8 (assignment 6b) 
-    try {
-      const normalizedEmail = value.email.toLowerCase();
-    
-      // store hashed password under the Prisma field name
-      const hashedPassword = value.hashed_password;
+    return next(err);
+  }
+};
 
-
-      const result = await prisma.$transaction(async (tx) => {
-        // create user
-        const newUser = await tx.user.create({
-          data: {
-            email: normalizedEmail,
-            name: value.name,
-            hashedPassword: hashedPassword, 
-          },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            createdAt: true,
-          },
-        });
-      
-        // create 3 welcome tasks (exact titles + priorities)
-        const welcomeTaskData = [
-          { title: "Complete your profile", userId: newUser.id, priority: "medium" },
-          { title: "Add your first task", userId: newUser.id, priority: "high" },
-          { title: "Explore the app", userId: newUser.id, priority: "low" },
-        ];
-      
-        await tx.task.createMany({ data: welcomeTaskData });
-      
-        // fetch tasks to return
-        const welcomeTasks = await tx.task.findMany({
-          where: {
-            userId: newUser.id,
-            title: { in: welcomeTaskData.map((t) => t.title) },
-          },
-          select: {
-            id: true,
-            title: true,
-            isCompleted: true,
-            userId: true,
-            priority: true,
-          },
-          orderBy: { id: "asc" }, // makes response stable
-        });
-      
-        return { user: newUser, welcomeTasks };
-      });
-
-      //global.user_id = result.user.id;
-      
-      // modified for week 10 (assignment 8)
-      const csrfToken = setJwtCookie(req, res, result.user);
-
-      return res.status(201).json({
-        name: result.user.name,
-        email: result.user.email,
-        csrfToken,
-        user: result.user,
-        welcomeTasks: result.welcomeTasks,
-        transactionStatus: "success",
-      });
-    
-    } catch (err) {
-      if (err.code === "P2002") {
-        return res.status(400).json({ error: "Email already registered" });
-      }
-      return next(err);
-    }
-  };
-
-// (Assignment 5b 3a): logon now authenticates via DB
+// logon authenticates via DB
 const logon = async (req, res, next) => {
-    if (!req.body) req.body = {};
-  
-    const { email, password } = req.body;
-  
-    try {
-      const normalizedEmail = (email || "").toLowerCase();
+  if (!req.body) req.body = {};
 
-const user = await prisma.user.findUnique({
-  where: { email: normalizedEmail },
-  select: {
-    id: true,
-    name: true,
-    email: true,
-    hashedPassword: true, // needed ONLY to verify password
-  },
+  const { email, password } = req.body;
 
-});
+  try {
+    const normalizedEmail = (email || "").toLowerCase();
 
-if (!user) {
-  return res
-    .status(StatusCodes.UNAUTHORIZED)
-    .json({ message: "Authentication Failed" });
-}
-  
-      const passwordsMatch = await comparePassword(
-        password,
-        user.hashedPassword
-      );
-  
-      if (!passwordsMatch) {
-        return res
-          .status(StatusCodes.UNAUTHORIZED)
-          .json({ message: "Authentication Failed" });
-      }
-  
-      //global.user_id = user.id;
-      
-      // modified for week 10 (assignment 8)
-      const csrfToken = setJwtCookie(req, res, user);
-  
-      return res.status(StatusCodes.OK).json({
-        name: user.name,
-        email: user.email,
-        csrfToken,
-      });
-    } catch (err) {
-      return next(err);
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        hashedPassword: true, // needed ONLY to verify password
+      },
+    });
+
+    if (!user) {
+      return res
+        .status(StatusCodes.UNAUTHORIZED)
+        .json({ message: "Authentication Failed" });
     }
-  };
 
+    const passwordsMatch = await comparePassword(password, user.hashedPassword);
+
+    if (!passwordsMatch) {
+      return res
+        .status(StatusCodes.UNAUTHORIZED)
+        .json({ message: "Authentication Failed" });
+    }
+
+    const csrfToken = setJwtCookie(req, res, user);
+
+    return res.status(StatusCodes.OK).json({
+      name: user.name,
+      email: user.email,
+      csrfToken,
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
 
 const logoff = (req, res) => {
-  //global.user_id = null;
-
-  //modified (for week 10, assignment 8) to clear the cookie
+  //clear the cookie
   res.clearCookie("jwt", cookieFlags(req));
   // no body needed
   return res.sendStatus(StatusCodes.OK);

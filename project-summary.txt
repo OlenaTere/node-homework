@@ -1,2 +1,13 @@
 https://node-homework-for-ctd-pilot-node-class.onrender.com
 
+For Assignment 11, I added an optional dueDate field to tasks and a new endpoint
+to retrieve overdue tasks.
+
+New endpoint:
+GET /api/tasks/overdue
+Returns all incomplete tasks for the logged-in user where dueDate is in the past.
+
+Modified endpoints:
+POST /api/tasks
+PATCH /api/tasks/:id
+Both now optionally accept a dueDate field (ISO date string).

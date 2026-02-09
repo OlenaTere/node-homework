@@ -9,30 +9,28 @@ const { register, logoff, logon } = require("../controllers/userController");
 const jwtMiddleware = require("../middleware/jwtMiddleware");
 const jwt = require("jsonwebtoken");
 
-// a few useful globals
 let saveRes = null;
 let saveData = null;
 
 const cookie = require("cookie");
 
-// this enhanced mock res tracks Set-Cookie headers
 function MockResponseWithCookies() {
-    const res = httpMocks.createResponse({
-      eventEmitter: EventEmitter,
-    });
-  
-    res.cookie = (name, value, options = {}) => {
-      const serialized = cookie.serialize(name, String(value), options);
-      let currentHeader = res.getHeader("Set-Cookie");
-      if (currentHeader === undefined) {
-        currentHeader = [];
-      }
-      currentHeader.push(serialized);
-      res.setHeader("Set-Cookie", currentHeader);
-    };
-  
-    return res;
-  }
+  const res = httpMocks.createResponse({
+    eventEmitter: EventEmitter,
+  });
+
+  res.cookie = (name, value, options = {}) => {
+    const serialized = cookie.serialize(name, String(value), options);
+    let currentHeader = res.getHeader("Set-Cookie");
+    if (currentHeader === undefined) {
+      currentHeader = [];
+    }
+    currentHeader.push(serialized);
+    res.setHeader("Set-Cookie", currentHeader);
+  };
+
+  return res;
+}
 
 beforeAll(async () => {
   // clear database
@@ -54,16 +52,14 @@ describe("testing logon, register, and logoff", () => {
       body: { name: "Bob", email: "bob@sample.com", password: "Pa$$word20" },
     });
 
-    // added to fix assignment9 tests after adding reCAPTCHA for assignment 10
-req.get = (headerName) =>
-    headerName === "X-Recaptcha-Test"
-      ? process.env.RECAPTCHA_BYPASS
-      : undefined;
+    req.get = (headerName) =>
+      headerName === "X-Recaptcha-Test"
+        ? process.env.RECAPTCHA_BYPASS
+        : undefined;
 
     saveRes = MockResponseWithCookies();
     await waitForRouteHandlerCompletion(register, req, saveRes);
 
-    // keep the returned data for later tests (37/38)
     saveData = saveRes._getJSONData();
 
     expect(saveRes.statusCode).toBe(201);
@@ -138,7 +134,6 @@ req.get = (headerName) =>
     const res = MockResponseWithCookies();
     await waitForRouteHandlerCompletion(register, req, res);
 
-    // often 400 or 409 depending on implementation
     expect([400, 409]).toContain(res.statusCode);
   });
 });
@@ -214,7 +209,11 @@ describe("Testing JWT middleware", () => {
 
     saveReq = req;
 
-    const next = await waitForRouteHandlerCompletion(jwtMiddleware, req, saveRes);
+    const next = await waitForRouteHandlerCompletion(
+      jwtMiddleware,
+      req,
+      saveRes,
+    );
     expect(next).toHaveBeenCalled();
   });
 

@@ -22,6 +22,7 @@ model Task {
   title        String   @db.VarChar(255)
   isCompleted Boolean  @default(false) @map("is_completed")
   priority    String   @default("medium") @db.VarChar(10) // Added for assignment 7
+  dueDate     DateTime? @db.Timestamp(6) @map("due_date")
   userId      Int       @map("user_id")
   createdAt   DateTime @default(now()) @db.Timestamp(6) @map("created_at")
   User       User    @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
